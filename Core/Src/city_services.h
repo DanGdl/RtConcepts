@@ -11,7 +11,7 @@
 
 #define DELAY 3000
 
-#define TOTAL_SERVICES 3
+#define TOTAL_SERVICES 1
 
 // available services
 #define FIRE_TEAM 0
@@ -19,17 +19,20 @@
 #define AMBULANCE 2
 
 // names for available services
-#define NAME_FIRE_TEAM "fireTeam"
-#define NAME_POLICE "police"
-#define NAME_AMBULANCE "ambulance"
+#define NAME_FIRE_TEAM "FireTeam"
+#define NAME_POLICE "Police"
+#define NAME_AMBULANCE "Ambulance"
 
 // amount of teams in every service
 #define FIRE_TEAM_SIZE 2
 #define POLICE_SIZE 3
 #define AMBULANCE_SIZE 4
 
-const char* names[TOTAL_SERVICES] = {NAME_FIRE_TEAM, NAME_POLICE, NAME_AMBULANCE};
-const int   teams[TOTAL_SERVICES] = {FIRE_TEAM_SIZE, POLICE_SIZE, AMBULANCE_SIZE};
+const char* names[TOTAL_SERVICES] = {NAME_FIRE_TEAM}; //, NAME_POLICE, NAME_AMBULANCE};
+const char* queue_names[TOTAL_SERVICES] = {"qFireTeam"}; //, NAME_POLICE, NAME_AMBULANCE};
+const char* sema_names[TOTAL_SERVICES] = {"sFireTeam"}; //, NAME_POLICE, NAME_AMBULANCE};
+const char* mtx_names[TOTAL_SERVICES] = {"mFireTeam"}; //, NAME_POLICE, NAME_AMBULANCE};
+const int   teams[TOTAL_SERVICES] = {FIRE_TEAM_SIZE}; //, POLICE_SIZE, AMBULANCE_SIZE};
 
 typedef struct request {
 	int service;
@@ -47,7 +50,7 @@ typedef struct service_attr {
 
 typedef struct task_params {
 	uint32_t time;
-	osSemaphoreId_t* semaphore;
+	osSemaphoreId_t semaphore;
 	const char* name;
 } task_params_t;
 

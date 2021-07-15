@@ -28,6 +28,8 @@
 #include <time.h>
 #include <stdlib.h>
 #include "city_services.h"
+#include <string.h>
+#include <semphr.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -72,6 +74,23 @@ const osMessageQueueAttr_t dispatcherQueue_attributes = {
 };
 /* USER CODE BEGIN PV */
 service_attr_t services[TOTAL_SERVICES];
+
+#ifdef __GNUC__
+/* With GCC/RAISONANCE, small printf (option LD Linker->Libraries->Small printf set to 'Yes') calls __io_putchar() */
+#define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
+
+#else
+
+#define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
+
+#endif /* __GNUC__ */
+
+PUTCHAR_PROTOTYPE {
+	/* Place your implementation of fputc here */
+	/* e.g. write a character to the USART2 and Loop until the end of transmission */
+	HAL_UART_Transmit(&huart3, (uint8_t *)&ch, 1, 0xFFFF);
+	return ch;
+}
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -123,7 +142,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_ETH_Init();
+//  MX_ETH_Init();
   MX_USART3_UART_Init();
   MX_USB_OTG_FS_PCD_Init();
   /* USER CODE BEGIN 2 */
@@ -154,17 +173,24 @@ int main(void)
 
   srand(time(NULL));
 	for (int i = 0; i < TOTAL_SERVICES; i++) {
+		printf("setup for team %d\r\n", i);
 		osMessageQueueAttr_t* serviceQueueAttr = malloc(sizeof(osMessageQueueAttr_t));
-		serviceQueueAttr -> name = names[i];
-		osMessageQueueId_t* serviceQueue = osMessageQueueNew (16, sizeof(request_t), serviceQueueAttr);
+		memset(serviceQueueAttr, 0, sizeof(*serviceQueueAttr));
+		serviceQueueAttr -> name = queue_names[i];
+		osMessageQueueId_t* serviceQueue = osMessageQueueNew(16, sizeof(request_t), serviceQueueAttr);
+		free(serviceQueueAttr);
 
 		osMutexAttr_t* serviceLockAttributes = malloc(sizeof(osMutexAttr_t));
-		serviceLockAttributes -> name = names[i];
+		memset(serviceLockAttributes, 0, sizeof(*serviceLockAttributes));
+		serviceLockAttributes -> name = mtx_names[i];
 		osMutexId_t serviceLock = osMutexNew(serviceLockAttributes);
+		free(serviceLockAttributes);
 
 		osSemaphoreAttr_t* semaphoreAttr = malloc(sizeof(osSemaphoreAttr_t));
-		semaphoreAttr -> name = names[i];
+		memset(semaphoreAttr, 0, sizeof(*semaphoreAttr));
+		semaphoreAttr -> name = sema_names[i];
 		osSemaphoreId_t semaphore = osSemaphoreNew(teams[i], teams[i], semaphoreAttr);
+		free(semaphoreAttr);
 
 		service_attr_t* attrs = malloc(sizeof(service_attr_t));
 		attrs -> name = names[i];
@@ -174,14 +200,17 @@ int main(void)
 		services[i] = *attrs;
 
 		osThreadAttr_t* serviceTaskAttrs = malloc(sizeof(osThreadAttr_t));
+		memset(serviceTaskAttrs, 0, sizeof(*serviceTaskAttrs));
 		serviceTaskAttrs -> name = names[i];
 		serviceTaskAttrs -> stack_size = 128 * 4;
 		serviceTaskAttrs -> priority = (osPriority_t) osPriorityLow;
 		osThreadId_t serviceTaskId = osThreadNew(serviceTask, attrs, serviceTaskAttrs);
+		free(serviceTaskAttrs);
 
 		attrs -> task = serviceTaskId;
-	}
 
+		printf("setup for team %d done\r\n", i);
+	}
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -436,47 +465,52 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void serviceTask(void *argument) {
 	service_attr_t* settings = (service_attr_t*) argument;
+	struct request req;
 	for(;;) {
 		osStatus_t mResult = osMutexAcquire(settings -> mutex, pdMS_TO_TICKS(5));
 		if (mResult == osOK) {
-			struct request req;
 			osStatus_t result = osMessageQueueGet(settings -> queue, &req, NULL, 0);
 			osMutexRelease(settings -> mutex);
 
 			if (result == osOK) {
-				printf("%s got request for %d teams %ld seconds\n", settings -> name, req.groups, req.task_time);
+				printf("%s got request for %d teams %ld ms\r\n", settings -> name, req.groups, req.task_time);
 
 				for (int i = 0; i < req.groups; i++) {
 					osThreadAttr_t* teamTaskAttrs = malloc(sizeof(osThreadAttr_t));
-					teamTaskAttrs -> name = NULL; // settings -> name;
+					memset(teamTaskAttrs, 0, sizeof(*teamTaskAttrs));
+					teamTaskAttrs -> name = NULL;
 					teamTaskAttrs -> stack_size = 128 * 4;
 					teamTaskAttrs -> priority = (osPriority_t) osPriorityLow;
 
 					task_params_t* params = malloc(sizeof(task_params_t));
+					memset(params, 0, sizeof(*params));
 					params -> semaphore = settings -> semaphore;
 					params -> time = req.task_time;
 					params -> name = settings -> name;
-					/*osThreadId_t serviceTaskId =*/
+
 					osThreadNew(teamTask, params, teamTaskAttrs);
+					free(teamTaskAttrs);
 				}
 			} else {
-				printf("%s error receiving message %d\n", settings -> name, result);
+				// printf("%s error receiving message %d\r\n", settings -> name, result);
 			}
 		} else {
-			printf("%s failed to acquire lock %d\n", settings -> name, mResult);
+			printf("%s failed to acquire lock %d\r\n", settings -> name, mResult);
 		}
-		osDelay(pdMS_TO_TICKS(DELAY));
 	}
 }
 
 void teamTask(void *argument) {
 	task_params_t* params = (task_params_t*) argument;
-	printf("%s running\n", params -> name);
-	osSemaphoreAcquire(params -> semaphore, pdMS_TO_TICKS(5));
-	osDelay(pdMS_TO_TICKS(params -> time));
-	osSemaphoreRelease(params -> semaphore);
-	printf("%s done\n", params -> name);
-	free(params);
+	while (params != NULL) {
+		osStatus_t result = osSemaphoreAcquire(params -> semaphore, pdMS_TO_TICKS(5));
+		if (result == osOK) {
+//				osDelay(pdMS_TO_TICKS(params -> time));
+			osSemaphoreRelease(params -> semaphore);
+			free(params);
+			params = NULL;
+		}
+	}
 	osThreadExit();
 }
 /* USER CODE END 4 */
@@ -488,28 +522,25 @@ void teamTask(void *argument) {
   * @retval None
   */
 /* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
-{
+void StartDefaultTask(void *argument) {
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
-  for(;;)
-  {
+  for (;;) {
 	  int service_num = rand() % TOTAL_SERVICES;
-	  int team_num = rand() % 10;
+	  int team_num = 1; // rand() % 4 + 1;
 	  int time_ms = rand() % 10;
 
-	  // use malloc?
 	  struct request req = {
 			  .service = service_num,
 			  .groups = team_num,
 			  .task_time = time_ms,
 	  };
-	  printf("Default task, request for service %d, teams %d, time %d\n", service_num, team_num, time_ms);
+	  // printf("Default task, request for service %d, teams %d, time %d ms\r\n", service_num, team_num, time_ms);
 	  osStatus_t qResult = osMessageQueuePut(dispatcherQueueHandle, &req, 0, 0);
 	  if (qResult == osOK) {
-		  printf("Dispatcher request sent\n");
+		  printf("Dispatcher request sent\r\n");
 	  } else {
-		  printf("Failed to send dispatcher request %d\n", qResult);
+		  printf("Failed to send dispatcher request %d\r\n", qResult);
 	  }
 	  osDelay(pdMS_TO_TICKS(DELAY));
   }
@@ -537,14 +568,14 @@ void dispatch(void *argument)
 		  if (mResult == osOK) {
 			  osStatus_t qResult = osMessageQueuePut(serviceData.queue, &req, 0, 0);
 			  if (qResult != osOK) {
-				  printf("Failed to put message in queue%d\n", qResult);
+				  printf("Failed to put message in queue%d\r\n", qResult);
 			  }
 			  osMutexRelease(serviceData.mutex);
 		  } else {
-			  printf("Failed to acquire lock %d\n", mResult);
+			  printf("Failed to acquire lock %d\r\n", mResult);
 		  }
 	  } else {
-		  printf("Failed to get message from queue %d\n", qResult);
+		  printf("Failed to get message from queue %d\r\n", qResult);
 	  }
     osDelay(pdMS_TO_TICKS(DELAY));
   }
