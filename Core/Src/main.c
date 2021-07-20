@@ -96,7 +96,6 @@ PUTCHAR_PROTOTYPE {
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_ETH_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_USB_OTG_FS_PCD_Init(void);
 void StartDefaultTask(void *argument);
@@ -142,7 +141,6 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-//  MX_ETH_Init();
   MX_USART3_UART_Init();
   MX_USB_OTG_FS_PCD_Init();
   /* USER CODE BEGIN 2 */
@@ -170,25 +168,23 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
-
   srand(time(NULL));
 	for (int i = 0; i < TOTAL_SERVICES; i++) {
-		printf("setup for team %d\r\n", i);
 		osMessageQueueAttr_t* serviceQueueAttr = malloc(sizeof(osMessageQueueAttr_t));
 		memset(serviceQueueAttr, 0, sizeof(*serviceQueueAttr));
-		serviceQueueAttr -> name = queue_names[i];
+		serviceQueueAttr -> name = names[i];
 		osMessageQueueId_t* serviceQueue = osMessageQueueNew(16, sizeof(request_t), serviceQueueAttr);
 		free(serviceQueueAttr);
 
 		osMutexAttr_t* serviceLockAttributes = malloc(sizeof(osMutexAttr_t));
 		memset(serviceLockAttributes, 0, sizeof(*serviceLockAttributes));
-		serviceLockAttributes -> name = mtx_names[i];
+		serviceLockAttributes -> name = names[i];
 		osMutexId_t serviceLock = osMutexNew(serviceLockAttributes);
 		free(serviceLockAttributes);
 
 		osSemaphoreAttr_t* semaphoreAttr = malloc(sizeof(osSemaphoreAttr_t));
 		memset(semaphoreAttr, 0, sizeof(*semaphoreAttr));
-		semaphoreAttr -> name = sema_names[i];
+		semaphoreAttr -> name = names[i];
 		osSemaphoreId_t semaphore = osSemaphoreNew(teams[i], teams[i], semaphoreAttr);
 		free(semaphoreAttr);
 
@@ -208,8 +204,6 @@ int main(void)
 		free(serviceTaskAttrs);
 
 		attrs -> task = serviceTaskId;
-
-		printf("setup for team %d done\r\n", i);
 	}
   /* USER CODE END RTOS_QUEUES */
 
@@ -295,50 +289,6 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-}
-
-/**
-  * @brief ETH Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_ETH_Init(void)
-{
-
-  /* USER CODE BEGIN ETH_Init 0 */
-
-  /* USER CODE END ETH_Init 0 */
-
-  /* USER CODE BEGIN ETH_Init 1 */
-
-  /* USER CODE END ETH_Init 1 */
-  heth.Instance = ETH;
-  heth.Init.AutoNegotiation = ETH_AUTONEGOTIATION_ENABLE;
-  heth.Init.Speed = ETH_SPEED_100M;
-  heth.Init.DuplexMode = ETH_MODE_FULLDUPLEX;
-  heth.Init.PhyAddress = LAN8742A_PHY_ADDRESS;
-  heth.Init.MACAddr[0] =   0x00;
-  heth.Init.MACAddr[1] =   0x80;
-  heth.Init.MACAddr[2] =   0xE1;
-  heth.Init.MACAddr[3] =   0x00;
-  heth.Init.MACAddr[4] =   0x00;
-  heth.Init.MACAddr[5] =   0x00;
-  heth.Init.RxMode = ETH_RXPOLLING_MODE;
-  heth.Init.ChecksumMode = ETH_CHECKSUM_BY_HARDWARE;
-  heth.Init.MediaInterface = ETH_MEDIA_INTERFACE_RMII;
-
-  /* USER CODE BEGIN MACADDRESS */
-
-  /* USER CODE END MACADDRESS */
-
-  if (HAL_ETH_Init(&heth) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN ETH_Init 2 */
-
-  /* USER CODE END ETH_Init 2 */
-
 }
 
 /**
@@ -467,13 +417,13 @@ void serviceTask(void *argument) {
 	service_attr_t* settings = (service_attr_t*) argument;
 	struct request req;
 	for(;;) {
-		osStatus_t mResult = osMutexAcquire(settings -> mutex, pdMS_TO_TICKS(5));
+		osStatus_t mResult = osMutexAcquire(settings -> mutex, 0);
 		if (mResult == osOK) {
 			osStatus_t result = osMessageQueueGet(settings -> queue, &req, NULL, 0);
 			osMutexRelease(settings -> mutex);
 
 			if (result == osOK) {
-				printf("%s got request for %d teams %ld ms\r\n", settings -> name, req.groups, req.task_time);
+				printf("Got request\r\n");
 
 				for (int i = 0; i < req.groups; i++) {
 					osThreadAttr_t* teamTaskAttrs = malloc(sizeof(osThreadAttr_t));
@@ -492,20 +442,21 @@ void serviceTask(void *argument) {
 					free(teamTaskAttrs);
 				}
 			} else {
-				// printf("%s error receiving message %d\r\n", settings -> name, result);
+				 // printf("Error receiving message\r\n");
 			}
 		} else {
-			printf("%s failed to acquire lock %d\r\n", settings -> name, mResult);
+			 // printf("Failed to acquire lock\r\n");
 		}
 	}
 }
 
 void teamTask(void *argument) {
+	printf("Team task running\n\r");
 	task_params_t* params = (task_params_t*) argument;
 	while (params != NULL) {
-		osStatus_t result = osSemaphoreAcquire(params -> semaphore, pdMS_TO_TICKS(5));
+		osStatus_t result = osSemaphoreAcquire(params -> semaphore, 0);
 		if (result == osOK) {
-//				osDelay(pdMS_TO_TICKS(params -> time));
+			osDelay(pdMS_TO_TICKS(params -> time));
 			osSemaphoreRelease(params -> semaphore);
 			free(params);
 			params = NULL;
@@ -522,12 +473,13 @@ void teamTask(void *argument) {
   * @retval None
   */
 /* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument) {
+void StartDefaultTask(void *argument)
+{
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
   for (;;) {
 	  int service_num = rand() % TOTAL_SERVICES;
-	  int team_num = 1; // rand() % 4 + 1;
+	  int team_num = rand() % 4 + 1;
 	  int time_ms = rand() % 10;
 
 	  struct request req = {
@@ -535,12 +487,12 @@ void StartDefaultTask(void *argument) {
 			  .groups = team_num,
 			  .task_time = time_ms,
 	  };
-	  // printf("Default task, request for service %d, teams %d, time %d ms\r\n", service_num, team_num, time_ms);
+
 	  osStatus_t qResult = osMessageQueuePut(dispatcherQueueHandle, &req, 0, 0);
 	  if (qResult == osOK) {
 		  printf("Dispatcher request sent\r\n");
 	  } else {
-		  printf("Failed to send dispatcher request %d\r\n", qResult);
+		  // printf("Failed to send dispatcher request\r\n");
 	  }
 	  osDelay(pdMS_TO_TICKS(DELAY));
   }
@@ -558,27 +510,30 @@ void dispatch(void *argument)
 {
   /* USER CODE BEGIN dispatch */
   /* Infinite loop */
-  for(;;)
-  {
-	  struct request req;
-	  osStatus_t qResult = osMessageQueueGet(dispatcherQueueHandle, &req, NULL, 0);
-	  if (qResult == osOK) {
+	struct request req;
+	osStatus_t mResult = osOK;
+	osStatus_t putResult = osOK;
+	for(;;) {
+		osStatus_t getResult = osOK;
+		if (mResult == osOK && putResult == osOK) {
+			getResult = osMessageQueueGet(dispatcherQueueHandle, &req, NULL, 0);
+		}
+		if (getResult == osOK) {
 		  service_attr_t serviceData = services[req.service];
-		  osStatus_t mResult = osMutexAcquire(serviceData.mutex, pdMS_TO_TICKS(5));
+		  mResult = osMutexAcquire(serviceData.mutex, 0);
 		  if (mResult == osOK) {
-			  osStatus_t qResult = osMessageQueuePut(serviceData.queue, &req, 0, 0);
-			  if (qResult != osOK) {
-				  printf("Failed to put message in queue%d\r\n", qResult);
+			  putResult = osMessageQueuePut(serviceData.queue, &req, 0, 0);
+			  if (putResult != osOK) {
+				  printf("Failed to put message in queue\r\n");
 			  }
 			  osMutexRelease(serviceData.mutex);
 		  } else {
-			  printf("Failed to acquire lock %d\r\n", mResult);
+			  // printf("Failed to acquire lock\r\n");
 		  }
-	  } else {
-		  printf("Failed to get message from queue %d\r\n", qResult);
-	  }
-    osDelay(pdMS_TO_TICKS(DELAY));
-  }
+		} else {
+		  // printf("Failed to get message from queue %d\r\n", qResult);
+		}
+	}
   /* USER CODE END dispatch */
 }
 

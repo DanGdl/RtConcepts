@@ -11,7 +11,7 @@
 
 #define DELAY 3000
 
-#define TOTAL_SERVICES 1
+#define TOTAL_SERVICES 3
 
 // available services
 #define FIRE_TEAM 0
@@ -28,11 +28,9 @@
 #define POLICE_SIZE 3
 #define AMBULANCE_SIZE 4
 
-const char* names[TOTAL_SERVICES] = {NAME_FIRE_TEAM}; //, NAME_POLICE, NAME_AMBULANCE};
-const char* queue_names[TOTAL_SERVICES] = {"qFireTeam"}; //, NAME_POLICE, NAME_AMBULANCE};
-const char* sema_names[TOTAL_SERVICES] = {"sFireTeam"}; //, NAME_POLICE, NAME_AMBULANCE};
-const char* mtx_names[TOTAL_SERVICES] = {"mFireTeam"}; //, NAME_POLICE, NAME_AMBULANCE};
-const int   teams[TOTAL_SERVICES] = {FIRE_TEAM_SIZE}; //, POLICE_SIZE, AMBULANCE_SIZE};
+const char* names[TOTAL_SERVICES] = {NAME_FIRE_TEAM, NAME_POLICE, NAME_AMBULANCE};
+
+const int teams[TOTAL_SERVICES] = {FIRE_TEAM_SIZE, POLICE_SIZE, AMBULANCE_SIZE};
 
 typedef struct request {
 	int service;
