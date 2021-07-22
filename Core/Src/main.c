@@ -198,22 +198,20 @@ int main(void)
   		osSemaphoreId_t semaphore = osSemaphoreNew(teams[i], teams[i], semaphoreAttr);
   		free(semaphoreAttr);
 
-  		service_attr_t* attrs = malloc(sizeof(service_attr_t));
-  		attrs -> name = names[i];
-  		attrs -> queue = serviceQueue;
-  		attrs -> mutex = serviceLock;
-  		attrs -> semaphore = semaphore;
+  		services[i].name = names[i];
+  		services[i].queue = serviceQueue;
+  		services[i].mutex = serviceLock;
+  		services[i].semaphore = semaphore;
 
   		osThreadAttr_t* serviceTaskAttrs = malloc(sizeof(osThreadAttr_t));
   		memset(serviceTaskAttrs, 0, sizeof(*serviceTaskAttrs));
   		serviceTaskAttrs -> name = names[i];
   		serviceTaskAttrs -> stack_size = 128 * 4;
   		serviceTaskAttrs -> priority = (osPriority_t) osPriorityLow;
-  		osThreadId_t serviceTaskId = osThreadNew(serviceTask, attrs, serviceTaskAttrs);
+  		osThreadId_t serviceTaskId = osThreadNew(serviceTask, &services[i], serviceTaskAttrs);
   		free(serviceTaskAttrs);
 
-  		attrs -> task = serviceTaskId;
-  		services[i] = *attrs;
+  		services[i].task = serviceTaskId;
   	}
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
